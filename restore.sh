@@ -24,8 +24,6 @@ BACKUP_REPO_URL="https://github.com/dinner3000/hermes-backup.git"
 SKILLS_REPO_URL="https://github.com/dinner3000/hermes-skills.git"
 HERMES_HOME="${HOME}/.hermes"
 BACKUP_DIR="${HOME}/projects/hermes-backup"
-PROJECTS_DIR="${HOME}/projects"
-HERMES_SKILLS_DIR="${PROJECTS_DIR}/hermes-skills"
 
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -189,19 +187,11 @@ else
 fi
 echo ""
 
-# ── Step 7: Install custom skills ──
+# ── Step 7: Install custom skills from GitHub ──
 echo -e "${YELLOW}[7/9]${NC} Installing custom skills..."
 
-if [ -f "${BACKUP_DIR}/skills/install.sh" ]; then
-  echo "  Found install.sh in backup — running it..."
-  bash "${BACKUP_DIR}/skills/install.sh"
-elif [ -f "${HERMES_SKILLS_DIR}/install.sh" ]; then
-  echo "  Found existing install.sh in ~/projects/hermes-skills — running..."
-  bash "${HERMES_SKILLS_DIR}/install.sh"
-else
-  echo "  Cloning hermes-skills repo and installing..."
-  curl -fsSL https://raw.githubusercontent.com/dinner3000/hermes-skills/main/install.sh | bash
-fi
+echo "  Fetching from hermes-skills repo..."
+curl -fsSL https://raw.githubusercontent.com/dinner3000/hermes-skills/main/install.sh | bash
 
 echo -e "  ${GREEN}✔${NC} Custom skills installed"
 echo ""
