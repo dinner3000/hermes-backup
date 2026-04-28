@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "description": "Projects bootstrapped with project-bootstrapper skill. Used by install.sh to restore projects on new Hermes instances.",
+  "projects": {
+    "personal-memory-assistant": {
+      "title": "Personal Memory Assistant",
+      "description": "Personal life/work memory assistant using Hermes + markdown journal",
+      "path": "~/projects/personal-memory-assistant",
+      "github": "https://github.com/dinner3000/personal-memory-assistant",
+      "created": "2026-04-28"
+    }
+  }
+}
