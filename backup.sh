@@ -19,7 +19,6 @@ set -euo pipefail
 REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
 BACKUP_DIR="${REPO_DIR}"
 HERMES_HOME="${HOME}/.hermes"
-SKILLS_REPO="${HOME}/projects/hermes-skills"
 DATE_TAG=$(date +%Y-%m-%d)
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -170,22 +169,12 @@ else
 fi
 echo ""
 
-# ── Step 6: Copy skills manifest & reference ──
-echo -e "${YELLOW}[6/8]${NC} Backing up skills manifest..."
+# ── Step 6: Save skills repo reference ──
+echo -e "${YELLOW}[6/8]${NC} Saving skills repo reference..."
 
 mkdir -p "${BACKUP_DIR}/skills"
 
-if [ -f "${SKILLS_REPO}/projects.json" ]; then
-  cp "${SKILLS_REPO}/projects.json" "${BACKUP_DIR}/skills/projects.json"
-  echo -e "  ${GREEN}✔${NC} projects.json"
-fi
-
-if [ -f "${SKILLS_REPO}/install.sh" ]; then
-  cp "${SKILLS_REPO}/install.sh" "${BACKUP_DIR}/skills/install.sh"
-  echo -e "  ${GREEN}✔${NC} install.sh"
-fi
-
-# Save the skills repo URL for restore
+# Only store the URL — actual skills are fetched from hermes-skills at restore time
 echo "https://github.com/dinner3000/hermes-skills.git" > "${BACKUP_DIR}/skills/skills-repo-url.txt"
 echo -e "  ${GREEN}✔${NC} skills repo reference saved"
 echo ""
