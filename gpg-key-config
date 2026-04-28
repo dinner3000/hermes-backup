@@ -1,0 +1,11 @@
+%echo Generating Hermes backup key pair
+Key-Type: eddsa
+Key-Curve: ed25519
+Subkey-Type: ecdh
+Subkey-Curve: cv25519
+Name-Real: Hermes Backup
+Name-Email: dinner3000@users.noreply.github.com
+Expire-Date: 0
+%no-protection
+%commit
+%echo Done

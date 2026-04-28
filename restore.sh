@@ -120,40 +120,57 @@ echo ""
 
 # ── Step 5: Decrypt secrets ──
 echo -e "${YELLOW}[5/9]${NC} Decrypting secrets..."
-echo -e "  ${YELLOW}Enter the GPG passphrase you used during backup.${NC}"
-echo ""
 
-DECRYPTED=0
+GPG_PRIVATE_KEY="${BACKUP_DIR}/config/hermes-backup-private.key"
 
-if [ -f "${BACKUP_DIR}/config/.env.gpg" ]; then
-  if gpg --decrypt --output "${HERMES_HOME}/.env" "${BACKUP_DIR}/config/.env.gpg"; then
-    chmod 600 "${HERMES_HOME}/.env"
-    echo -e "  ${GREEN}✔${NC} .env restored (decrypted)"
-    DECRYPTED=1
-  else
-    echo -e "  ${RED}  ✘ Failed to decrypt .env — wrong passphrase?${NC}"
-    echo "  You can manually set up ${HERMES_HOME}/.env later."
-  fi
+if [ ! -f "$GPG_PRIVATE_KEY" ]; then
+  echo -e "  ${YELLOW}  Private key not found at ${GPG_PRIVATE_KEY}${NC}"
+  echo "  Secrets cannot be decrypted. Set up .env manually."
 else
-  echo "  - No encrypted .env found in backup"
-fi
-
-if [ -f "${BACKUP_DIR}/config/auth.json.gpg" ]; then
-  if gpg --decrypt --output "${HERMES_HOME}/auth.json" "${BACKUP_DIR}/config/auth.json.gpg"; then
-    chmod 600 "${HERMES_HOME}/auth.json"
-    echo -e "  ${GREEN}✔${NC} auth.json restored (decrypted)"
-    DECRYPTED=1
-  else
-    echo -e "  ${RED}  ✘ Failed to decrypt auth.json${NC}"
+  # Import private key
+  if ! gpg --list-secret-keys 'Hermes Backup' &>/dev/null; then
+    echo "  Importing GPG private key..."
+    gpg --batch --import "$GPG_PRIVATE_KEY" 2>/dev/null || {
+      echo -e "  ${RED}  ✘ Failed to import private key${NC}"
+    }
   fi
-else
-  echo "  - No encrypted auth.json found in backup"
-fi
 
-if [ "$DECRYPTED" -eq 0 ]; then
-  echo ""
-  echo -e "  ${YELLOW}No secrets restored. Create ~/.hermes/.env manually with:${NC}"
-  echo "    hermes setup"
+  DECRYPTED=0
+
+  if [ -f "${BACKUP_DIR}/config/.env.gpg" ]; then
+    if gpg --batch --yes --trust-model always \
+      --output "${HERMES_HOME}/.env" \
+      --decrypt "${BACKUP_DIR}/config/.env.gpg" 2>/dev/null; then
+      chmod 600 "${HERMES_HOME}/.env"
+      echo -e "  ${GREEN}✔${NC} .env restored (decrypted)"
+      DECRYPTED=1
+    else
+      echo -e "  ${RED}  ✘ Failed to decrypt .env${NC}"
+      echo "  Make sure you have the correct private key."
+    fi
+  else
+    echo "  - No encrypted .env found in backup"
+  fi
+
+  if [ -f "${BACKUP_DIR}/config/auth.json.gpg" ]; then
+    if gpg --batch --yes --trust-model always \
+      --output "${HERMES_HOME}/auth.json" \
+      --decrypt "${BACKUP_DIR}/config/auth.json.gpg" 2>/dev/null; then
+      chmod 600 "${HERMES_HOME}/auth.json"
+      echo -e "  ${GREEN}✔${NC} auth.json restored (decrypted)"
+      DECRYPTED=1
+    else
+      echo -e "  ${RED}  ✘ Failed to decrypt auth.json${NC}"
+    fi
+  else
+    echo "  - No encrypted auth.json found in backup"
+  fi
+
+  if [ "$DECRYPTED" -eq 0 ]; then
+    echo ""
+    echo -e "  ${YELLOW}No secrets restored. Create ~/.hermes/.env manually with:${NC}"
+    echo "    hermes setup"
+  fi
 fi
 echo ""
 
