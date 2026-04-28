@@ -106,17 +106,31 @@ else
 fi
 echo ""
 
-# ── Step 4: Encrypt secrets ──
-echo -e "${YELLOW}[4/8]${NC} Encrypting secrets (GPG)..."
-echo -e "${YELLOW}  You'll be prompted for a passphrase to encrypt .env and auth.json.${NC}"
-echo -e "${YELLOW}  Use the SAME passphrase every time — you'll need it for restore.${NC}"
-echo ""
+# ── Step 4: Encrypt secrets (non-interactive, uses GPG public key) ──
+echo -e "${YELLOW}[4/8]${NC} Encrypting secrets..."
 
+GPG_PUBLIC_KEY="${REPO_DIR}/config/hermes-backup-public.key"
+
+if [ ! -f "$GPG_PUBLIC_KEY" ]; then
+  echo -e "${RED}  ✘ Public key not found at ${GPG_PUBLIC_KEY}${NC}"
+  echo "  Run setup first: gpg --import config/hermes-backup-public.key"
+  exit 1
+fi
+
+# Import the key if not already in keyring
+if ! gpg --list-keys 'Hermes Backup' &>/dev/null; then
+  gpg --import "$GPG_PUBLIC_KEY" 2>/dev/null
+fi
+
+RECIPIENT="E5FF386452B38293B0B91CC656F6369D51C3649F"
 SECRETS_FOUND=0
 
 if [ -f "${HERMES_HOME}/.env" ]; then
   SECRETS_FOUND=1
-  gpg --symmetric --cipher-algo AES256 --output "${BACKUP_DIR}/config/.env.gpg" "${HERMES_HOME}/.env"
+  gpg --batch --yes --trust-model always \
+    --recipient "$RECIPIENT" \
+    --output "${BACKUP_DIR}/config/.env.gpg" \
+    --encrypt "${HERMES_HOME}/.env"
   echo -e "  ${GREEN}✔${NC} .env → config/.env.gpg"
 else
   echo "  - .env (not found, skipping)"
@@ -124,7 +138,10 @@ fi
 
 if [ -f "${HERMES_HOME}/auth.json" ]; then
   SECRETS_FOUND=1
-  gpg --symmetric --cipher-algo AES256 --output "${BACKUP_DIR}/config/auth.json.gpg" "${HERMES_HOME}/auth.json"
+  gpg --batch --yes --trust-model always \
+    --recipient "$RECIPIENT" \
+    --output "${BACKUP_DIR}/config/auth.json.gpg" \
+    --encrypt "${HERMES_HOME}/auth.json"
   echo -e "  ${GREEN}✔${NC} auth.json → config/auth.json.gpg"
 else
   echo "  - auth.json (not found, skipping)"
@@ -142,16 +159,12 @@ SESSIONS_DIR="${HERMES_HOME}/sessions"
 mkdir -p "${BACKUP_DIR}/sessions"
 
 if [ -d "${SESSIONS_DIR}" ]; then
-  SESSION_COUNT=$(find "${SESSIONS_DIR}" -name "*.db" -newer "$(date -d '30 days ago' '+%Y-%m-%d' 2>/dev/null || echo '1970-01-01')" 2>/dev/null | wc -l)
-  echo "  Found ~${SESSION_COUNT} active session database(s)"
-
-  # Archive entire sessions dir (it's SQLite databases, typically small)
+  echo "  Archiving session data..."
   tar czf "${BACKUP_DIR}/sessions/sessions-${DATE_TAG}.tar.gz" \
     -C "$(dirname "${SESSIONS_DIR}")" \
-    "$(basename "${SESSIONS_DIR}")" 2>/dev/null || {
-    echo -e "  ${YELLOW}  Warning: session archive had issues (files may be locked)${NC}"
-  }
-  echo -e "  ${GREEN}✔${NC} sessions archived"
+    "$(basename "${SESSIONS_DIR}")" --ignore-failed-read 2>/dev/null
+  SESSION_SIZE=$(du -sh "${BACKUP_DIR}/sessions/sessions-${DATE_TAG}.tar.gz" 2>/dev/null | cut -f1)
+  echo -e "  ${GREEN}✔${NC} sessions archived (${SESSION_SIZE:-unknown})"
 else
   echo "  - sessions/ (not found, skipping)"
 fi
@@ -215,16 +228,40 @@ else
   echo "  ✔ Committed"
 fi
 
-# Push
-if git remote get-url origin &>/dev/null; then
-  git push -u origin main 2>&1 || git push -u origin master 2>&1 || {
-    echo -e "  ${YELLOW}  Warning: push failed. The backup is saved locally.${NC}"
-    echo "  You can push manually: cd ${REPO_DIR} && git push"
-  }
-  echo -e "  ${GREEN}✔${NC} Pushed to GitHub"
-else
-  echo -e "  ${YELLOW}  No remote configured. Backup saved locally at ${REPO_DIR}${NC}"
-fi
+# Push via GitHub API (reliable, no SSH needed)
+echo "  Pushing to GitHub via API..."
+cd "${REPO_DIR}"
+
+# Get the files we need to push
+find config skills sessions meta -type f ! -name '*.gpg' | while read -r file; do
+  if git diff --cached --quiet "$file" 2>/dev/null; then
+    continue  # unchanged
+  fi
+  ENCODED=$(base64 -w0 < "$file")
+  SHA=$(gh api "repos/dinner3000/hermes-backup/contents/${file}" 2>/dev/null | python3 -c "import json,sys; d=json.load(sys.stdin); print(d['sha'])" 2>/dev/null || echo "")
+  gh api "repos/dinner3000/hermes-backup/contents/${file}" \
+    --method PUT \
+    -f message="backup: ${DATE_TAG}" \
+    -f content="$ENCODED" \
+    ${SHA:+-f sha="$SHA"} \
+    --silent 2>/dev/null && echo "  ✓ ${file}" || echo "  ⚠ ${file} (skipped)"
+done
+
+# Also push GPG-encrypted files
+for gpg_file in config/.env.gpg config/auth.json.gpg; do
+  if [ -f "$gpg_file" ]; then
+    ENCODED=$(base64 -w0 < "$gpg_file")
+    SHA=$(gh api "repos/dinner3000/hermes-backup/contents/${gpg_file}" 2>/dev/null | python3 -c "import json,sys; d=json.load(sys.stdin); print(d['sha'])" 2>/dev/null || echo "")
+    gh api "repos/dinner3000/hermes-backup/contents/${gpg_file}" \
+      --method PUT \
+      -f message="backup: ${DATE_TAG}" \
+      -f content="$ENCODED" \
+      ${SHA:+-f sha="$SHA"} \
+      --silent 2>/dev/null && echo "  ✓ ${gpg_file}" || echo "  ⚠ ${gpg_file} (skipped)"
+  fi
+done
+
+echo -e "  ${GREEN}✔${NC} Push complete"
 echo ""
 
 # ── Done ──
