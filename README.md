@@ -13,7 +13,7 @@ chat history, custom skills, and projects — to/from GitHub.
 | Chat history | `~/.hermes/sessions/` (last 30 days) | No |
 | API keys & tokens | `~/.hermes/.env` | Yes (GPG) |
 | OAuth credentials | `~/.hermes/auth.json` | Yes (GPG) |
-| Custom skills | Reference to `hermes-skills` repo | No |
+| Custom skills | Reference to `hermes-skills` repo (not snapshot) | No |
 | Bootstrapped projects | Reference to `projects.json` | No |
 
 ## Workflow Overview
