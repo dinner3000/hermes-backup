@@ -19,7 +19,6 @@ set -euo pipefail
 REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
 BACKUP_DIR="${REPO_DIR}"
 HERMES_HOME="${HOME}/.hermes"
-SKILLS_REPO="${HOME}/projects/hermes-skills"
 DATE_TAG=$(date +%Y-%m-%d)
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -170,22 +169,12 @@ else
 fi
 echo ""
 
-# ── Step 6: Copy skills manifest & reference ──
-echo -e "${YELLOW}[6/8]${NC} Backing up skills manifest..."
+# ── Step 6: Save skills repo reference ──
+echo -e "${YELLOW}[6/8]${NC} Saving skills repo reference..."
 
 mkdir -p "${BACKUP_DIR}/skills"
 
-if [ -f "${SKILLS_REPO}/projects.json" ]; then
-  cp "${SKILLS_REPO}/projects.json" "${BACKUP_DIR}/skills/projects.json"
-  echo -e "  ${GREEN}✔${NC} projects.json"
-fi
-
-if [ -f "${SKILLS_REPO}/install.sh" ]; then
-  cp "${SKILLS_REPO}/install.sh" "${BACKUP_DIR}/skills/install.sh"
-  echo -e "  ${GREEN}✔${NC} install.sh"
-fi
-
-# Save the skills repo URL for restore
+# Only store the URL — actual skills are fetched from hermes-skills at restore time
 echo "https://github.com/dinner3000/hermes-skills.git" > "${BACKUP_DIR}/skills/skills-repo-url.txt"
 echo -e "  ${GREEN}✔${NC} skills repo reference saved"
 echo ""
@@ -228,20 +217,40 @@ else
   echo "  ✔ Committed"
 fi
 
-# Push
-if git remote get-url origin &>/dev/null; then
-  git push -u origin main 2>&1 || git push -u origin master 2>&1 || {
-    echo -e "  ${YELLOW}  SSH push failed. Trying GitHub API...${NC}"
-    # Upload via GitHub API as fallback
-    git_sha=$(git rev-parse HEAD)
-    gh api repos/dinner3000/hermes-backup/git/refs/heads/main -f ref="refs/heads/main" -f sha="$git_sha" \
-      2>/dev/null || gh api repos/dinner3000/hermes-backup/git/refs -f ref="refs/heads/main" -f sha="$git_sha" \
-      2>/dev/null || echo -e "  ${YELLOW}  GitHub push unavailable — backup saved locally.${NC}"
-  }
-  echo -e "  ${GREEN}✔${NC} Pushed to GitHub"
-else
-  echo -e "  ${YELLOW}  No remote configured. Backup saved locally at ${REPO_DIR}${NC}"
-fi
+# Push via GitHub API (reliable, no SSH needed)
+echo "  Pushing to GitHub via API..."
+cd "${REPO_DIR}"
+
+# Get the files we need to push
+find config skills sessions meta -type f ! -name '*.gpg' | while read -r file; do
+  if git diff --cached --quiet "$file" 2>/dev/null; then
+    continue  # unchanged
+  fi
+  ENCODED=$(base64 -w0 < "$file")
+  SHA=$(gh api "repos/dinner3000/hermes-backup/contents/${file}" 2>/dev/null | python3 -c "import json,sys; d=json.load(sys.stdin); print(d['sha'])" 2>/dev/null || echo "")
+  gh api "repos/dinner3000/hermes-backup/contents/${file}" \
+    --method PUT \
+    -f message="backup: ${DATE_TAG}" \
+    -f content="$ENCODED" \
+    ${SHA:+-f sha="$SHA"} \
+    --silent 2>/dev/null && echo "  ✓ ${file}" || echo "  ⚠ ${file} (skipped)"
+done
+
+# Also push GPG-encrypted files
+for gpg_file in config/.env.gpg config/auth.json.gpg; do
+  if [ -f "$gpg_file" ]; then
+    ENCODED=$(base64 -w0 < "$gpg_file")
+    SHA=$(gh api "repos/dinner3000/hermes-backup/contents/${gpg_file}" 2>/dev/null | python3 -c "import json,sys; d=json.load(sys.stdin); print(d['sha'])" 2>/dev/null || echo "")
+    gh api "repos/dinner3000/hermes-backup/contents/${gpg_file}" \
+      --method PUT \
+      -f message="backup: ${DATE_TAG}" \
+      -f content="$ENCODED" \
+      ${SHA:+-f sha="$SHA"} \
+      --silent 2>/dev/null && echo "  ✓ ${gpg_file}" || echo "  ⚠ ${gpg_file} (skipped)"
+  fi
+done
+
+echo -e "  ${GREEN}✔${NC} Push complete"
 echo ""
 
 # ── Done ──

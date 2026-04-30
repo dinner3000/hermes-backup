@@ -1,4 +1,4 @@
-Backup date: 2026-04-28
+Backup date: 2026-05-01
 Hostname: gary-TVI7309X
 User: gary
 OS: Linux gary-TVI7309X 6.17.0-22-generic #22~24.04.1-Ubuntu SMP PREEMPT_DYNAMIC Thu Mar 26 15:25:54 UTC 2 x86_64 x86_64 x86_64 GNU/Linux
@@ -6,7 +6,7 @@ Hermes version: Hermes Agent v0.11.0 (2026.4.23)
 Project: /home/gary/.hermes/hermes-agent
 Python: 3.11.15
 OpenAI SDK: 2.32.0
-Update available: 179 commits behind — run 'hermes update'
+Update available: 537 commits behind — run 'hermes update'
 Model: unknown
 Provider: unknown
-Skills count: 72
+Skills count: 83
