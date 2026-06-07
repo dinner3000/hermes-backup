@@ -125,7 +125,7 @@ RECIPIENT="E5FF386452B38293B0B91CC656F6369D51C3649F"
 SECRETS_FOUND=0
 
 if [ -f "${HERMES_HOME}/.env" ]; then
-  SECRETS_FOUND=1
+  SECRETS_FOUND=$((SECRETS_FOUND + 1))
   gpg --batch --yes --trust-model always \
     --recipient "$RECIPIENT" \
     --output "${BACKUP_DIR}/config/.env.gpg" \
@@ -136,7 +136,7 @@ else
 fi
 
 if [ -f "${HERMES_HOME}/auth.json" ]; then
-  SECRETS_FOUND=1
+  SECRETS_FOUND=$((SECRETS_FOUND + 1))
   gpg --batch --yes --trust-model always \
     --recipient "$RECIPIENT" \
     --output "${BACKUP_DIR}/config/auth.json.gpg" \
