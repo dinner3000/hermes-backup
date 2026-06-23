@@ -233,7 +233,7 @@ if git push --set-upstream origin main 2>&1; then
 else
   echo -e "  ${RED}✘${NC} Git push via SSH failed"
   PUSH_FAILED=1
-
+fi
 
 if [ "$PUSH_FAILED" -eq 0 ]; then
   echo -e "  ${GREEN}✔${NC} Push complete"
