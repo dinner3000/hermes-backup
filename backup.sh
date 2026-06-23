@@ -217,40 +217,71 @@ else
   echo "  ✔ Committed"
 fi
 
-# Push via GitHub API (reliable, no SSH needed)
-echo "  Pushing to GitHub via API..."
-cd "${REPO_DIR}"
+# Push mechanism
+echo "  Pushing to GitHub..."
+PUSH_FAILED=0
 
-# Get the files we need to push
-find config skills sessions meta -type f ! -name '*.gpg' | while read -r file; do
-  if git diff --cached --quiet "$file" 2>/dev/null; then
-    continue  # unchanged
-  fi
-  ENCODED=$(base64 -w0 < "$file")
-  SHA=$(gh api "repos/dinner3000/hermes-backup/contents/${file}" 2>/dev/null | python3 -c "import json,sys; d=json.load(sys.stdin); print(d['sha'])" 2>/dev/null || echo "")
-  gh api "repos/dinner3000/hermes-backup/contents/${file}" \
-    --method PUT \
-    -f message="backup: ${DATE_TAG}" \
-    -f content="$ENCODED" \
-    ${SHA:+-f sha="$SHA"} \
-    --silent 2>/dev/null && echo "  ✓ ${file}" || echo "  ⚠ ${file} (skipped)"
-done
-
-# Also push GPG-encrypted files
-for gpg_file in config/.env.gpg config/auth.json.gpg; do
-  if [ -f "$gpg_file" ]; then
-    ENCODED=$(base64 -w0 < "$gpg_file")
-    SHA=$(gh api "repos/dinner3000/hermes-backup/contents/${gpg_file}" 2>/dev/null | python3 -c "import json,sys; d=json.load(sys.stdin); print(d['sha'])" 2>/dev/null || echo "")
-    gh api "repos/dinner3000/hermes-backup/contents/${gpg_file}" \
+# Method 1: Try gh CLI (GitHub API)
+if command -v gh &>/dev/null && gh auth status 2>/dev/null; then
+  echo "  Using gh CLI (GitHub API)..."
+  # Push non-encrypted files
+  while read -r file; do
+    [ -z "$file" ] && continue
+    ENCODED=$(base64 -w0 < "$file")
+    SHA=$(gh api "repos/dinner3000/hermes-backup/contents/${file}" 2>/dev/null | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('sha',''))" 2>/dev/null || echo "")
+    gh api "repos/dinner3000/hermes-backup/contents/${file}" \
       --method PUT \
       -f message="backup: ${DATE_TAG}" \
       -f content="$ENCODED" \
       ${SHA:+-f sha="$SHA"} \
-      --silent 2>/dev/null && echo "  ✓ ${gpg_file}" || echo "  ⚠ ${gpg_file} (skipped)"
-  fi
-done
+      --silent 2>/dev/null && echo "  ✓ ${file}" || { echo "  ⚠ ${file} (skipped)"; PUSH_FAILED=1; }
+  done < <(find config skills sessions meta -type f ! -name '*.gpg')
 
-echo -e "  ${GREEN}✔${NC} Push complete"
+  # Push GPG-encrypted files
+  for gpg_file in config/.env.gpg config/auth.json.gpg; do
+    if [ -f "$gpg_file" ]; then
+      ENCODED=$(base64 -w0 < "$gpg_file")
+      SHA=$(gh api "repos/dinner3000/hermes-backup/contents/${gpg_file}" 2>/dev/null | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('sha',''))" 2>/dev/null || echo "")
+      gh api "repos/dinner3000/hermes-backup/contents/${gpg_file}" \
+        --method PUT \
+        -f message="backup: ${DATE_TAG}" \
+        -f content="$ENCODED" \
+        ${SHA:+-f sha="$SHA"} \
+        --silent 2>/dev/null && echo "  ✓ ${gpg_file}" || { echo "  ⚠ ${gpg_file} (skipped)"; PUSH_FAILED=1; }
+    fi
+  done
+else
+  echo "  gh not authenticated — skipping API push"
+  PUSH_FAILED=1
+fi
+
+# Method 2: Fallback to git push via SSH
+if [ "$PUSH_FAILED" -ne 0 ]; then
+  echo "  Trying git push via SSH..."
+  # Ensure ssh-agent has the key loaded
+  if command -v ssh-agent &>/dev/null; then
+    eval $(ssh-agent -s) >/dev/null 2>&1 || true
+    ssh-add ~/.ssh/id_ed25519 2>/dev/null || true
+  fi
+  if git push --set-upstream origin main 2>&1; then
+    echo -e "  ${GREEN}✔${NC} Git push via SSH succeeded"
+    PUSH_FAILED=0
+  else
+    echo -e "  ${RED}✘${NC} Git push via SSH failed"
+  fi
+fi
+
+if [ "$PUSH_FAILED" -eq 0 ]; then
+  echo -e "  ${GREEN}✔${NC} Push complete"
+else
+  echo -e "  ${RED}✘${NC} Push to GitHub failed — local backup is safe in ${REPO_DIR}"
+  echo ""
+  echo -e "${YELLOW}To fix GitHub authentication:${NC}"
+  echo "  1. Run: gh auth login"
+  echo "     (or use device code: visit https://github.com/login/device and enter the code)"
+  echo "  2. Or add your SSH public key to GitHub:"
+  echo "     Key: $(cat ~/.ssh/id_ed25519.pub 2>/dev/null || echo 'No SSH key found')"
+fi
 echo ""
 
 # ── Done ──
