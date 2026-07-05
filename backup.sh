@@ -66,7 +66,7 @@ echo -e "${YELLOW}[2/8]${NC} Preparing git repository..."
 if [ ! -d "${REPO_DIR}/.git" ]; then
   echo "  Initializing git repo..."
   git init "${REPO_DIR}"
-  git -C "${REPO_DIR}" remote add origin git@github.com:dinner3000/hermes-backup.git
+  git -C "${REPO_DIR}" remote add origin ssh://git@ssh.github.com:443/dinner3000/hermes-backup.git
   echo "  ✔ Repo initialized"
 else
   echo "  ✔ Git repo exists"
